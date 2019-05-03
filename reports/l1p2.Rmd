@@ -1,0 +1,72 @@
+---
+title: "EDA do log de eventos"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(here)
+library(treemapify)
+theme_set(theme_bw())
+```
+
+## Lendo os eventos
+
+```{r ETL}
+events = read_csv("https://github.com/wikimedia-research/Discovery-Hiring-Analyst-2016/raw/master/events_log.csv.gz")
+
+buscas = read_csv(here::here("data/search_data.csv"))
+
+events = events %>% slice(1:5e4) # Útil para testar código em dados pequenos. Comente na hora de processá-los para valer.
+
+events = events %>% 
+    group_by(session_id) %>% 
+    arrange(timestamp) %>% 
+    mutate(search_index = cumsum(action == "searchResultPage"), # contador de buscas na sessão.
+           date = ymd_hms(timestamp))  %>% 
+    ungroup()
+```
+
+## No tempo
+
+
+```{r}
+buscas %>% 
+    mutate(date = round_date(session_start_date, unit = "day")) %>% 
+    count(date, group) %>% 
+    ggplot(aes(x = date, y = num_clicks)) + 
+    geom_bar()
+```
+#Qual é a nossa taxa de cliques geral diária? Como isso varia entre os grupos?
+
+```{r}
+buscas %>% 
+    mutate(date = round_date(session_start_date, unit = "day")) %>% 
+    ggplot(aes(x = date, y = num_clicks, fill = group)) + 
+    geom_bar(stat = "identity")
+```
+
+#Quais resultados as pessoas tendem a tentar primeiro? Como isso muda dia a dia?
+
+
+```{r}
+
+buscas %>% 
+    filter(!is.na(first_click), first_click < 500) %>% 
+    mutate(date = round_date(session_start_date, unit = "day")) %>%
+    group_by(first_click) %>%
+    ggplot(aes(x =date, y = first_click)) + 
+    geom_point()
+```
+
+```{r}
+
+buscas %>% 
+    filter(!is.na(first_click), first_click < 500) %>% 
+    mutate(date = round_date(session_start_date, unit = "day")) %>%
+    group_by(first_click) %>%
+    ggplot(aes(area = first_click, fill = date)) + 
+    geom_treemap()
+```
+
