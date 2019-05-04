@@ -60,13 +60,27 @@ buscas %>%
     geom_point()
 ```
 
+
+```{r}
+
+
+buscas %>% 
+    filter(!is.na(first_click), first_click < 30) %>% 
+    mutate(date = round_date(session_start_date, unit = "day")) %>%
+    ggplot(aes(x = first_click)) +  
+    facet_wrap(~date) + 
+    geom_bar()
+
+```
+
+# Qual é a nossa taxa de resultados zero no geral? Como isso varia entre os grupos?
+
 ```{r}
 
 buscas %>% 
-    filter(!is.na(first_click), first_click < 500) %>% 
+    filter(!is.na(results), results == 0) %>% 
     mutate(date = round_date(session_start_date, unit = "day")) %>%
-    group_by(first_click) %>%
-    ggplot(aes(area = first_click, fill = date)) + 
-    geom_treemap()
-```
+    ggplot(aes(x = results, fill = group)) +  
+    geom_bar()
 
+```
