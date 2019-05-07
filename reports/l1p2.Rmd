@@ -7,7 +7,6 @@ output: html_notebook
 library(tidyverse)
 library(lubridate)
 library(here)
-library(treemapify)
 theme_set(theme_bw())
 ```
 
@@ -82,5 +81,16 @@ buscas %>%
     mutate(date = round_date(session_start_date, unit = "day")) %>%
     ggplot(aes(x = results, fill = group)) +  
     geom_bar()
+
+```
+
+# A duração da sessão é aproximadamente o tempo entre o primeiro e o último evento de uma sessão. Escolha uma variável do conjunto de dados e descreva sua relação com o tamanho da sessão. Visualize o relacionamento.
+
+```{r}
+buscas %>% 
+    filter(!is.na(session_length)) %>% 
+    mutate(date = round_date(session_start_date, unit = "day")) %>%
+    ggplot(aes(x = group, y =  session_length)) +  
+    geom_point()
 
 ```
