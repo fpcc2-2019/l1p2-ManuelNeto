@@ -7,7 +7,6 @@ output: html_notebook
 library(tidyverse)
 library(lubridate)
 library(here)
-library(treemapify)
 theme_set(theme_bw())
 ```
 
@@ -16,7 +15,7 @@ theme_set(theme_bw())
 ```{r ETL}
 events = read_csv("https://github.com/wikimedia-research/Discovery-Hiring-Analyst-2016/raw/master/events_log.csv.gz")
 
-buscas = read_csv(here::here("data/search_data.csv"))
+buscas = read_csv("https://raw.githubusercontent.com/fpcc2/wikimedia-sessions/master/data/search_data.csv")
 
 events = events %>% slice(1:5e4) # Útil para testar código em dados pequenos. Comente na hora de processá-los para valer.
 
@@ -28,59 +27,167 @@ events = events %>%
     ungroup()
 ```
 
-## No tempo
-
-
-```{r}
-buscas %>% 
-    mutate(date = round_date(session_start_date, unit = "day")) %>% 
-    count(date, group) %>% 
-    ggplot(aes(x = date, y = num_clicks)) + 
-    geom_bar()
-```
 #Qual é a nossa taxa de cliques geral diária? Como isso varia entre os grupos?
 
+    A taxa de click é uma variável descrita pela Wikimedia como a proporção de sessões de buscas onde o usuário clicou em um dos resultados exibidos. Para calcular a taxa de clicks geral, iremos poldar alguns dados os seguintes tipos:
+        -Pesquisas que não obtiveram resultados devem ser desconsideradas;
+        -Pesquisas  que têm clique mas não tem indicação de qual resultado o usuário clicou.
+    A polda é feita por observar um inconsistência dos tipos de dados descritos acima, visto que não é possível clicar em determinado resultado se não houveram resultados ou clicar em em algum resultado sem informar qual resultado foi clicado.
+
+
+    Uma primeira análise é feita para observar o número total de clicks diário geral e por grupo. Usamos as variáveis date, num_clicks e group. Observa-se que o dia 3 de março teve o maior número de clicks e o dia 9 o menor número de clicks. O fato do dia 9 ter o menor número de clicks pode ser justificado pelo fato da contabilidade do número de clicks nesse dia ter sido feita até as 20 horas, enquanto que nos demais dias a contabilidade durou 24 horas. É visível que o grupo b tem um menor número de clicks diários, mas que sua variação de clicks diários não acompanha a variação do grupo a. Do dia 3 para o dia 4, o número de clicks do grupo a sofreu uma redução, enquanto que o grupo b teve um aumento.
+    
+    
+    
+    
 ```{r}
 buscas %>% 
+    filter(results > 0)%>%
+    filter(!(num_clicks > 0 && (is.na(first_click) | first_click <= results)))%>%
     mutate(date = round_date(session_start_date, unit = "day")) %>% 
     ggplot(aes(x = date, y = num_clicks, fill = group)) + 
-    geom_bar(stat = "identity")
+    geom_bar(stat = "identity") +
+    labs(x = "Dia", y = "Número de clicks")
+
 ```
+
+
+
+    Para enfim responder a pergunta, foi feita uma nova análise dos dados levando em consideração as mesmas variáveis da análise anterior. Porém, observaremos agora a taxa de cliques diários em cada dia, agrupados por grupos. A taxa de clicks é calculada utilizando a divisão da variável número de sessões com mais de 1 click por número de sessões do dia.
+    Observa-se então que a taxa média de clicks diária é de aproximadamente 0.9 para o grupo a e de aproximadamente 0.23 para o grupo b. A variação da taxa de clicks entre os grupos seguem um padrão, sempre que a variação em a sobe, a de b também sobe.
+    
+```{r}
+
+buscas %>%
+    filter(results > 0)%>%
+    filter(!(num_clicks > 0 && (is.na(first_click) | first_click <= results)))%>%
+    mutate(date = round_date(session_start_date, unit = "day")) %>% 
+    group_by(date, group) %>%
+    summarise(
+                num_sessoes_dia = n_distinct(session_id), 
+                num_sessoes_mais_de_um_click = n_distinct(session_id[num_clicks > 0]),
+                "Taxa_de_cliques" = num_sessoes_mais_de_um_click/num_sessoes_dia) %>%
+    
+    ggplot(aes(x = date, y = Taxa_de_cliques, fill= group)) +
+    geom_bar(stat = "identity") +
+    labs(x = "Dia", y = "Taxa de clicks")
+
+```
+
 
 #Quais resultados as pessoas tendem a tentar primeiro? Como isso muda dia a dia?
 
-
+    Para a realização das duas  próximas análises foram descartados os dados que não possuiam valores para as variáveis de first_click e session_start_date. A variável firt_click representa o index do resultado que o usuário clicou primeiro. Para facilitar a visualização, utilizamos apenas os dados que possuem valor de first_click menor que 30. Na primeira análise foi necessário agrupar os dados por date e first_click, para possibilitar a contagem do número de first_click por dia. 
+    
+    O gráfico abaixo mostra a relação entre o número de clicks para os index de resultados, agrupado por dia. Constata-se que os usuários tendem a clicar no primerio resultado da pesquisa. 
+    
 ```{r}
 
-buscas %>% 
-    filter(!is.na(first_click), first_click < 500) %>% 
-    mutate(date = round_date(session_start_date, unit = "day")) %>%
-    group_by(first_click) %>%
-    ggplot(aes(x =date, y = first_click)) + 
-    geom_point()
+first_clicks = buscas %>%
+    filter(!is.na(first_click), !is.na(session_start_date), first_click < 30)%>%
+	mutate(date = round_date(session_start_date, unit = "day")) %>%
+	group_by("Date" = date, "First" = first_click) %>%
+	summarise(
+    	"Len" = length(first_click)
+	)
+
+first_clicks %>%
+	ggplot(aes(x = First, y = Len)) +
+    facet_wrap(~Date) + 
+	geom_bar(stat = "identity") +
+    labs(y = "Número de clicks", x = "Primeiro click")
+
 ```
 
 
+    A variação entre os dias pode ser observada pelo desvio padrão da variável de first_click. Observa-se uma pequena variação, com média 3, sendo a maior delas no dia 3 de março.
+    
+    
+    
 ```{r}
 
+first_clicks = buscas %>%
+    filter(!is.na(first_click), !is.na(session_start_date), first_click < 30)%>%
+	mutate(date = round_date(session_start_date, unit = "day")) %>%
+	group_by("Date" = date) %>%
+	summarise(
+    	"Desvio_padrao" = sd(first_click)
+	)
 
-buscas %>% 
-    filter(!is.na(first_click), first_click < 30) %>% 
-    mutate(date = round_date(session_start_date, unit = "day")) %>%
-    ggplot(aes(x = first_click)) +  
-    facet_wrap(~date) + 
-    geom_bar()
+first_clicks %>%
+	ggplot(aes(x = Date, y = Desvio_padrao)) +
+	geom_bar(stat = "identity") +
+    labs(x = "Dia", y = "Desvio padrão da variável first_click")
 
 ```
+
 
 # Qual é a nossa taxa de resultados zero no geral? Como isso varia entre os grupos?
 
+    A Wikimedia diz que zero results, ou seja, resultados zerados é quando a busca retorna 0 resultados. A proporção deste é quantas buscas obtiveram 0 resultados dentro de todas as buscas realizadas.
+    Assim será utilizada as variáveis results, session_id e date para responder à primeira pergunta. Para a segunda pergunta usaremos também a variável group.
+    A taxa de resultados zero é calculada utilizando a divisão da variável número de sessões com zero resultados por número de sessões.
+    A taxa de resultados zero possui uma grande variação e não segue um padrão. Observa-se que nos dias extremos a tava é alta. O dia 5 de março representa a menor taxa de resultados 0. 
+
 ```{r}
+buscas %>%
+    mutate(date = round_date(session_start_date, unit = "day")) %>% 
+    group_by(date) %>%
+    summarise(
+                num_sessoes = n_distinct(session_id), 
+                num_sessoes_com_zero_resultados = length(date[results == 0]),
+                "Taxa_de_resultados_zero" = num_sessoes_com_zero_resultados/num_sessoes) %>%
+    
+    ggplot(aes(y = Taxa_de_resultados_zero, x = date)) +
+    geom_line() +
+    labs(x = "Dia", y = "Taxa de resultados zero")
+    
 
+```
+
+
+    Para os grupos, a taxa de resultados zero segue uma porpoção aproximada de 3 para 1 entre os grupos a e b, respectivamente. Tendo a uma taxa de aproximadamente 0.6 e o grupo b uma taxa de aproximadamente 0.2.
+    
+```{r}
+buscas %>%
+    mutate(date = round_date(session_start_date, unit = "day")) %>% 
+    group_by(group) %>%
+    summarise(
+                num_sessoes = n_distinct(session_id), 
+                num_sessoes_com_zero_resultados = length(date[results == 0]),
+                "Taxa_de_resultados_zero" = num_sessoes_com_zero_resultados/num_sessoes) %>%
+    
+    ggplot(aes(y = Taxa_de_resultados_zero, x = group)) +
+    geom_col() + 
+    labs(x = "Grupos", y = "Taxa de resultados zero")
+    
+
+```
+
+
+# A duração da sessão é aproximadamente o tempo entre o primeiro e o último evento de uma sessão. Escolha uma variável do conjunto de dados e descreva sua relação com o tamanho da sessão. Visualize o relacionamento.
+
+        Foi escolhida a variável resuts para observar a relação entre ela e o tamanho da sessão, ou seja, observar se os usuários passam mais tempo na em sessões com um número considerável de resultados.
+
+
+```{r}
 buscas %>% 
-    filter(!is.na(results), results == 0) %>% 
+    filter(!is.na(session_length)) %>% 
     mutate(date = round_date(session_start_date, unit = "day")) %>%
-    ggplot(aes(x = results, fill = group)) +  
-    geom_bar()
+    ggplot(aes(y = results, x =  session_length)) +  
+    scale_x_log10()+
+    geom_point() +
+    labs(x = "Número de resultados", y = "Tamanho da sessão", title = "Relação entre o Tamanho da sessão e Número de resultados")
 
+```
+        
+        Pelo gráfico, as variáveis apresentam  uma fraca relação. Observa-se, de maneira geral, um comportamento mais linear, e bem próximo do valor 0 no eixo y, com uma concentração de pontos no centro do eixo x. Para confirmação da observação, calculou-se o coeficiente linear usando três métodos, são eles: pearson, spearman e kendall. Os resultados são exibidos na tabela abaixo. Para todos os métodos, o coeficiente linear é baixíssimo, comprovando a fraca relação entre as variáveis de Tamanho da sessão e Número de resultados. 
+
+```{r}
+    buscas %>%
+    summarise(
+        pearson = cor(session_length, results, method = "pearson"), 
+        spearman = cor(session_length, results, method = "spearman"), 
+        kendall = cor(session_length, results, method = "kendall")
+    ) 
 ```
