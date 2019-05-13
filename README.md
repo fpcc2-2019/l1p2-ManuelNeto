@@ -36,3 +36,8 @@ Existem 9 variáveis nos dados sendo elas:
 ## Dependências
 
 R, com os pacotes `tidyverse`, `lubridate` e `here`.
+
+
+## rpubs
+
+rpubs.com/ManuelNeto/495885
